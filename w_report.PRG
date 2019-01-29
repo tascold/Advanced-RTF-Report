@@ -2810,7 +2810,7 @@ LOCAL i,j, t_kol, ret_txt, row_txt, row_del, tmp_txt, kol_spt, kol_add
 LOCAL all_txt, tek_str, tmp_shabl, tmp_othet, row_skip
 	rep_errs=''	 && переменная для ошибки
 	rep_config=IIF(VARTYPE(m.rep_config)#"C","",m.rep_config)
-	rez_format=IIF(VARTYPE(m.rez_format)#"N",ICASE(UPPER(JUSTEXT(m.f_othet))="XLS",56,UPPER(JUSTEXT(m.f_othet))="XLSX",51,0),m.rez_format) && если расширение результата - XLS*, то будем преобразовывать результат в формат EXCEL файла автоматом
+	rez_format=IIF(VARTYPE(m.rez_format)#"N",ICASE(UPPER(JUSTEXT(m.f_othet))=="XLS",56,UPPER(JUSTEXT(m.f_othet))=="XLSX",51,0),m.rez_format) && если расширение результата - XLS*, то будем преобразовывать результат в формат EXCEL файла автоматом
 	IF EMPTY(JUSTPATH(m.f_othet))
 		m.f_othet=SYS(5)+CURDIR()+m.f_othet	&& дополняем полным путем, иначе EXCEL не поймет
 	ENDIF
