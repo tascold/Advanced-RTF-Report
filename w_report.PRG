@@ -211,7 +211,12 @@ PARAMETERS f_shabl, f_othet, rep_config
 *	1. [1].IZM: Функция ENCODE_SYMBOLS переписана для более быстрого выполнения.
 *	2. [3].ADD: Добавлен тег «[REP:NOTE]» для добавления в шаблон строк с комментариями (актуален только для шаблонов EXCEL). В готовый отчет эти строки добавлены не будут.
 *--------------------------------------------------------------------------------------------
-
+* Ver 3.3 - 2019 г.
+*--------------------------------------------------------------------------------------------
+*	1. [1].IZM: Добавлена возможность вывода в WORD отчет PNG графиков (нужен EXCEL!!!, конструкция DIA: GEN_DIAGR() - см. пример для WORD № 12)
+*	2. [3].IZM: Добавлен 4-й параметр для конвертации результата в большое кол-во форматов. Теперь по умолчанию результат остается в XML виде.
+*	3. [3].IZM: Изменен подход к шаблонам с выделенной служебной колонки на служебные строки (см. примеры EXCEL).
+*--------------------------------------------------------------------------------------------
 	IF VARTYPE(m.rep_config)#"C"
 		rep_config=''
 	ENDIF
@@ -750,10 +755,10 @@ LPARAMETERS t_rnomer,t_rztype,t_alias
 	          	RETURN -1
 	        ENDIF
 		CASE obtype=12 	&& ENDPAGE
-                        IF !EMPTY(objusl)               && есть условие применения
-                                IF !EMPTY(m.t_alias)
-                                        SELECT (m.t_alias)
-                                ENDIF
+			IF !EMPTY(objusl)               && есть условие применения
+            	IF !EMPTY(m.t_alias)
+                	SELECT (m.t_alias)
+                ENDIF
 				TRY 
 					tmp_crun=IIF(EVALUATE(ALLTRIM(_rtfreport.objusl)),1,0)
 				CATCH
@@ -899,12 +904,18 @@ LPARAMETERS t_rnomer,t_rztype,t_alias
 								znh_now="{\pict\jpegblip "+STRCONV(FILETOSTR(m.znh_now),15)+" }"
 							ENDCASE
 						ENDIF
+					CASE m.tmp_fusr=="DIA" AND VARTYPE(m.znh_now)="C"
+						IF LEFT(m.znh_now,6)=="ERROR:"
+							tmp_fusr=''		&& обнуляем признак картинки, чтобы показать текст ошибки
+						ELSE
+							znh_now="{\pict\pngblip "+STRCONV(m.znh_now,15)+" }"
+						ENDIF
 					CASE m.tmp_fusr=="PAR" AND VARTYPE(m.znh_now)="C"	&& Актуально только для RTF
 						znh_now=STRTRAN(m.znh_now,CHR(13),"{\par }")
 					ENDCASE
 				ENDIF
 				znh_con=m.znh_now	&& запоминается вычисленное и преобразованное значение для использования во внешних ф-х
-			CATCH
+			CATCH TO goto_error
 				err_now=1
 			ENDTRY
 			IF !EMPTY(m.t_alias) AND !EMPTY(m.tmp_recn)
@@ -919,14 +930,17 @@ LPARAMETERS t_rnomer,t_rztype,t_alias
 					DO CASE
 					CASE m.tmp_fend=="HEX"
 						znh_now=ENCODE_SYMBOLS(m.znh_now)
-					CASE m.tmp_fusr=="IMG" AND m.tmp_fend=="RM1"
-						znh_now="{\pict\brdrs"+SUBSTR(m.znh_now,7)
-					CASE m.tmp_fusr=="IMG" AND m.tmp_fend=="RM2"
-						znh_now="{\pict\brdrsh"+SUBSTR(m.znh_now,7)
-					CASE m.tmp_fusr=="IMG" AND m.tmp_fend=="RM3"
-						znh_now="{\pict\brdrdb"+SUBSTR(m.znh_now,7)
-					CASE m.tmp_fusr=="IMG" AND m.tmp_fend=="ML5"	&& масштабирование (уменьшение) картинки на 50%
-						znh_now="{\pict\picscalex50\picscaley50"+SUBSTR(m.znh_now,7)
+					CASE m.tmp_fusr=="IMG" OR m.tmp_fusr=="DIA"
+						DO CASE
+						CASE m.tmp_fend=="RM1"
+							znh_now="{\pict\brdrs"+SUBSTR(m.znh_now,7)
+						CASE m.tmp_fend=="RM2"
+							znh_now="{\pict\brdrsh"+SUBSTR(m.znh_now,7)
+						CASE m.tmp_fend=="RM3"
+							znh_now="{\pict\brdrdb"+SUBSTR(m.znh_now,7)
+						CASE m.tmp_fend=="ML5"	&& масштабирование (уменьшение) картинки на 50%
+							znh_now="{\pict\picscalex50\picscaley50"+SUBSTR(m.znh_now,7)
+						ENDCASE
 					OTHERWISE
 						m.znh_now=ALLTRIM(m.znh_now)
 					ENDCASE
@@ -1019,7 +1033,7 @@ LPARAMETERS t_anomer,t_keydata,t_keyalia
 		CASE VARTYPE(m.t_keydata)#"L"
 			key_data=m.t_keydata			&& ключевое значение для выборки данных из таблицы берется из контейнера
 		CASE !EMPTY(m.tbl__usl)				&& условие задано в шаблоне
-			tbl__usl=EVALUATE(m.tbl__usl)
+			tbl__usl=m.tbl__usl
 			key_data=.T.
 		OTHERWISE
 			tbl__usl=1
@@ -1671,7 +1685,7 @@ PRIVATE f_body,l_body
 			CASE LEN(m.tmp_text)=3 AND INLIST(m.tmp_text,"SUM","MAX","MIN","CNT","AVG")			&& функции подсчета
 				tmp_func=m.tmp_text
 				tmp_name=ALLTRIM(SUBSTR(m.tmp_name,AT(":",m.tmp_name)+1))	&& отсекаем ф-ю
-			CASE LEN(m.tmp_text)=3 AND INLIST(m.tmp_text,"DAT","TDT","PN1","PN2","PN3","PN4","KOL","RUB","INT","DEC","RD0","RD1","RD2","RD3","IMG","PAR")		&& функции преобразования
+			CASE LEN(m.tmp_text)=3 AND INLIST(m.tmp_text,"DAT","TDT","PN1","PN2","PN3","PN4","KOL","RUB","INT","DEC","RD0","RD1","RD2","RD3","IMG","DIA","PAR")		&& функции преобразования
 				tmp_fusr=m.tmp_text
 				tmp_name=ALLTRIM(SUBSTR(m.tmp_name,AT(":",m.tmp_name)+1))	&& отсекаем ф-ю
 			CASE LEN(m.tmp_text)=3 AND INLIST(m.tmp_text,"CON","TBL","GR1","GR2","GR3","GR4","GR5","GR6")		&& ссылка на алиас
@@ -2776,31 +2790,32 @@ RETURN 0
 *############################################################################################
 *############################################################################################
 FUNCTION XLS_REPORT	&& выгрузка в EXCEL с использованием XML EXCEL шаблона
-PARAMETERS f_shabl, f_othet, rep_config
+PARAMETERS f_shabl, f_othet, rep_config, rez_format
 *--------------------------------------------------------------------------------------------
 * @ TAS - 2019 г. Все параметры необязательны!
 *--------------------------------------------------------------------------------------------
 * 1 - f_shabl - файл шаблона
 * 2 - f_othet - файл результата
-* 3 - rep_config - Конфигурация запуска - может содержать любой набор из нижеперечисленных вариантов:
+* 3 - rep_config (не обязательно) - Конфигурация запуска - может содержать любой набор из нижеперечисленных вариантов:
 *	[SHOW]  - показать XLS отчет
 *	доп параметры см. в функции RTF_REPORT
+* 4 - rez_format (не обязательно) - формат результата, для функции SaveAs() MS EXCEL (см. xlFileFormat https://docs.microsoft.com/en-us/office/vba/api/excel.xlfileformat).
 *--------------------------------------------------------------------------------------------
 * Шаблон EXCEL должен содержать те-же теги, что описаны для WORD, заданные в первой колонке.
 * Первая колонка и строки со служебными тегами из готового документа будут удалены!!!
 *--------------------------------------------------------------------------------------------
-* ? XLS_REPORT("test2.xls","ready.xlsx","[SHOW]")
+* ? XLS_REPORT("test2.xls","ready.xlsx","[SHOW]",51)	&& 
 *--------------------------------------------------------------------------------------------
 LOCAL i,j, t_kol, ret_txt, row_txt, row_del, tmp_txt, kol_spt, kol_add
-LOCAL all_txt, tek_str, tmp_shabl, tmp_othet, form_ret, row_skip
+LOCAL all_txt, tek_str, tmp_shabl, tmp_othet, row_skip
 	rep_errs=''	 && переменная для ошибки
-	form_ret=1	 && при ошибке принимает отрицательное значение
+	rep_config=IIF(VARTYPE(m.rep_config)#"C","",m.rep_config)
+	rez_format=IIF(VARTYPE(m.rez_format)#"N",ICASE(UPPER(JUSTEXT(m.f_othet))="XLS",56,UPPER(JUSTEXT(m.f_othet))="XLSX",51,0),m.rez_format) && если расширение результата - XLS*, то будем преобразовывать результат в формат EXCEL файла автоматом
 	IF EMPTY(JUSTPATH(m.f_othet))
 		m.f_othet=SYS(5)+CURDIR()+m.f_othet	&& дополняем полным путем, иначе EXCEL не поймет
 	ENDIF
 	IF !FILE(m.f_shabl)
 		rep_errs='Не найден файл шаблона!'
-		form_ret=-1
 	ELSE
 		all_txt=STRCONV(FILETOSTR(m.f_shabl),11)	
 		ret_txt=''	&& результат
@@ -2881,7 +2896,7 @@ LOCAL all_txt, tek_str, tmp_shabl, tmp_othet, form_ret, row_skip
 			CASE UPPER(LEFT(ALLTRIM(m.tek_str),8))=="</PANES>" OR UPPER(LEFT(ALLTRIM(m.tek_str),20))=="</DOCUMENTPROPERTIES" OR UPPER(LEFT(ALLTRIM(m.tek_str),12))=="</AUTOFILTER" &&OR UPPER(LEFT(ALLTRIM(m.tek_str),8))=="</NAMES>"
 				row_del=0											&& теперь НЕ будем убирать все строки
 			CASE UPPER(LEFT(ALLTRIM(m.tek_str),11))=="<NAMEDRANGE"	
-				IF "Print_Area"$m.tek_str OR "Print_Titles"$m.tek_str	&& только некоторые пропускаем
+				IF "Print_Area"$m.tek_str 							&& только некоторые пропускаем
 					ret_txt=m.ret_txt+IIF(EMPTY(m.ret_txt),'',CHR(13))+m.tek_str
 				ENDIF
 			OTHERWISE
@@ -2904,36 +2919,49 @@ LOCAL all_txt, tek_str, tmp_shabl, tmp_othet, form_ret, row_skip
 *--------------------------------------------------------------------------------------------
 	tmp_shabl=SYS(2023)+'\'+SYS(3)+'.xml'
 	tmp_othet=SYS(2023)+'\'+SYS(3)+'.xml'
-	IF form_ret=1 AND STRTOFILE(m.ret_txt,m.tmp_shabl)<=0	&& сохранение готового шаблона
+	IF EMPTY(m.rep_errs) AND STRTOFILE(m.ret_txt,m.tmp_shabl)<=0	&& сохранение готового шаблона
 		rep_errs='Шаблон не содержит данных!'
-		form_ret=-1
-	ENDIF
-	IF form_ret=1
+	ELSE
 *		=STRTOFILE(m.ret_txt,'c:\tascold\1.xml')				&& для тестирования
 		rep_errs=RTF_REPORT(m.tmp_shabl, m.tmp_othet, STRTRAN(m.rep_config,"[SHOW]","")+"[ENCODE=9][EXCEL]")	&& формирование файла с данными
 *		=STRTOFILE(FILETOSTR(m.tmp_othet),'c:\tascold\2.xml')	&& для тестирования
-		IF !EMPTY(rep_errs)	
-			form_ret=-1
-		ENDIF
 	ENDIF
 *--------------------------------------------------------------------------------------------
 * Сохранение как документа EXCEL и финальные операции
 *--------------------------------------------------------------------------------------------
-	IF form_ret=1
-		oExcel= CREATEOBJECT("Excel.Application")
-		IF TYPE("oExcel")#"O"
-			rep_errs='Не установлен Excel! Отчет не может быть сформирован!'
-			form_ret=-1
-		ELSE
-			oExcel.DisplayAlerts = .F.
-			oExcel.Workbooks.OpenXML(m.tmp_othet,,2)
-			oExcel.Columns("A:A").Delete
-			oExcel.ActiveWorkbook.SaveAs(m.f_othet,51)
-			oExcel.Quit
-			IF "[SHOW]"$UPPER(m.rep_config)	&& Показать отчет
-				WSHShell=CreateObject("WScript.Shell",0,.F.)
-				WSHShell.Run('"'+m.f_othet+'"')
+	IF EMPTY(m.rep_errs)
+		IF m.rez_format#0
+			oExcel= CREATEOBJECT("Excel.Application")
+			IF TYPE("oExcel")#"O"
+				rep_errs='Не установлен Excel! Отчет не может быть сформирован!'
+			ELSE
+				oExcel.DisplayAlerts = .F.
+				TRY
+					oExcel.Workbooks.OpenXML(m.tmp_othet,,2)
+					oExcel.ActiveWorkbook.SaveAs(m.f_othet,m.rez_format)	&& попытка сохранения в заданном формате
+				CATCH TO goto_error
+					IF VARTYPE(m.proglang)="N" AND m.proglang=1	&& ENG
+						rep_error="Error saving report: "+goto_error.message
+					ELSE
+						rep_error="Ошибка сохранения отчета: "+goto_error.message
+					ENDIF
+				ENDTRY
+				oExcel.Quit
 			ENDIF
+		ELSE
+			TRY
+				=STRTOFILE(FILETOSTR(m.tmp_othet),m.f_othet)	&& сохранение временного отчета как результат
+			CATCH TO goto_error
+				IF VARTYPE(m.proglang)="N" AND m.proglang=1	&& ENG
+					rep_error="Error saving report: "+goto_error.message
+				ELSE
+					rep_error="Ошибка сохранения отчета: "+goto_error.message
+				ENDIF
+			ENDTRY
+		ENDIF
+		IF EMPTY(m.rep_errs) AND "[SHOW]"$UPPER(m.rep_config)	&& Показать отчет
+			WSHShell=CreateObject("WScript.Shell",0,.F.)
+			WSHShell.Run('"'+m.f_othet+'"')
 		ENDIF
 	ENDIF
 	IF FILE(m.tmp_shabl)
@@ -2984,7 +3012,7 @@ PARAMETERS rep_alias,rep_xname,rep_config,rep_sourse,rep_filter,rep_cols
 	add_tmprow=0		&& Если придутся добавлять строку, чтобы EXCEL добавил наименования колонок
 	rep_error=''		&& Для ошибки
 	tek_alias=ALIAS()	&& Сюда вернем алиас при выходе
-	rep_alias=IIF(VARTYPE(m.rep_alias)#"C" OR EMPTY(m.rep_alias),ALIAS(),m.rep_alias)
+	rep_alias=IIF(VARTYPE(m.rep_alias)#"C" OR EMPTY(m.rep_alias),ALIAS(),ALLTRIM(m.rep_alias))
 	rep_xname=IIF(VARTYPE(m.rep_xname)#"C","",m.rep_xname)
 	rep_sourse=IIF(VARTYPE(m.rep_sourse)#"C" OR EMPTY(m.rep_sourse),"*",m.rep_sourse)
 	rep_filter=IIF(VARTYPE(m.rep_filter)#"C" OR EMPTY(m.rep_filter),"1=1",m.rep_filter)
@@ -3159,3 +3187,141 @@ PARAMETERS rep_alias,rep_xname,rep_config,rep_sourse,rep_filter,rep_cols
 RETURN m.rep_error
 DEFINE CLASS EXCEL_REP as Shape
 ENDDEFINE
+
+FUNCTION GEN_DIAGR		&& генерация графика с помощью EXCEL
+PARAMETERS rep_alias,rep_xname,rep_config,rep_sourse,rep_filter,rep_nastr
+*--------------------------------------------------------------------------------------------
+* @ TAS - 2019 г.
+*--------------------------------------------------------------------------------------------
+* 1. rep_alias		- Alias источника данных, если не задан, то берется текущий.
+* 2. rep_xname		- форма результа:
+*		"C:TEMP\1.png"	- наименование файла, для сохранения графика.
+*		"RAW"			- контент полученного файла.
+*		"TMP"			- сгенерировать файл во временной папке (используется по умолчанию).
+* 3. rep_config		- конфиг:
+*		[Width=750]		- Ширина
+*		[Height=500]	- Высота
+*		[Type=-4101]	- Тип графика (см. XlChartType https://docs.microsoft.com/en-us/office/vba/api/excel.xlcharttype)
+*		[Style=230]		- Стиль графика
+*		[Format=PNG]	- Формат картинки (PNG - по умолчанию): png, gif, jpg, jpeg, bmp.
+* 		можно добавить доп. параметры сюда...	
+* 4. rep_sourse		- список полей для графика в виде "fields1,fields2,fields3" где первое поле должно содержать текст, 
+*					а остальные числовые данные
+* 5. rep_filter (не обязательно)- фильтр в виде условия для SQL запроса "field1=1 AND field2='ДА'" . Eсли не задан, то = "1=1".
+* 6. rep_nastr (не обязательно)	- доп. настройки линий графика через разделители "|" между линиями.
+*		"RGB:1=RGB(255, 0, 0)"	- ForeColor
+*		"DS:1="	- DashStyle = 1 ... 8 (см. MsoLineDashStyle https://docs.microsoft.com/en-us/office/vba/api/office.msolinedashstyle)
+*		"TP:1="	- Transparency = 0 ... 100
+*		"SM:1="	- Smooth = .T./.F.
+*		можно добавить доп. параметры сюда...
+*--------------------------------------------------------------------------------------------
+*	=GEN_DIAGR("reg","","","srf_name,srf_sum","RECNO()<=10","RGB:1=RGB(255,0,0)")
+*--------------------------------------------------------------------------------------------
+*	Проверки и первичная обработка входящих параметров
+*--------------------------------------------------------------------------------------------
+	LOCAL i,j, oExcel,zap_now, oChart, rep_error, rez_format
+	LOCAL line_data, line_lit, line_nomr, line_data
+	rep_error=''				&& Для ошибки
+	rep_xname=IIF(VARTYPE(m.rep_xname)#"C","",m.rep_xname)
+	rep_nastr=IIF(VARTYPE(m.rep_nastr)#"C","",m.rep_nastr)
+	rep_xtemp=IIF(VARTYPE(m.rep_xname)#"C" OR EMPTY(m.rep_xname) OR UPPER(m.rep_xname)=="TMP" OR UPPER(m.rep_xname)=="RAW",SYS(2023)+'\'+SYS(3)+'.png',m.rep_xname)
+	oExcel=DBF_TOEXCEL(m.rep_alias,"","[EXCEL]",m.rep_sourse,m.rep_filter)	
+	rez_format="png"			&& формат результата по умолчанию
+	IF VARTYPE(m.oExcel)#"O"	&& ошибка в DBF_TOEXCEL() при загрузке данных
+		rep_error=m.oExcel
+	ENDIF
+*--------------------------------------------------------------------------------------------
+* Настройка графика
+*--------------------------------------------------------------------------------------------
+	IF EMPTY(m.rep_error)
+		TRY
+			oChart=oExcel._oExcel.Worksheets.Item(1).Shapes.AddChart(4).Chart
+			oChart.Axes(1).TickLabels.Orientation = 90
+		    oChart.ChartStyle = 230
+			oChart.PlotArea.Format.Fill.Visible= 0  			&& msoFalse
+			FOR i=1 TO GETWORDCOUNT(m.rep_config,"]")			&& применяем доп настройки
+				line_data=ALLTRIM(GETWORDNUM(m.rep_config,m.i,"]"))
+				DO CASE
+				CASE UPPER(LEFT(m.line_data,6))=="[WIDTH"
+					oChart.ChartArea.Width = EVALUATE(SUBSTR(m.line_data,AT("=",m.line_data)+1))
+				CASE UPPER(LEFT(m.line_data,7))=="[HEIGHT"
+					oChart.ChartArea.Height = EVALUATE(SUBSTR(m.line_data,AT("=",m.line_data)+1))
+				CASE UPPER(LEFT(m.line_data,5))=="[TYPE"
+					oChart.ChartType = EVALUATE(SUBSTR(m.line_data,AT("=",m.line_data)+1))
+				CASE UPPER(LEFT(m.line_data,6))=="[STYLE"
+					oChart.ClearToMatchStyle
+					oChart.ChartStyle = EVALUATE(SUBSTR(m.line_data,AT("=",m.line_data)+1))
+				CASE UPPER(LEFT(m.line_data,7))=="[FORMAT"
+					rez_format=ALLTRIM(SUBSTR(m.line_data,AT("=",m.line_data)+1))
+					rep_xtemp=STRTRAN(LOWER(m.rep_xtemp),".png",LOWER("."+m.rez_format))
+				ENDCASE
+			ENDFOR
+		CATCH TO goto_error
+			rep_error="Ошибка настройки графика: "+goto_error.message
+		ENDTRY
+	ENDIF
+*	oExcel._oExcel.Visible= .T.
+*	SET STEP ON 
+*--------------------------------------------------------------------------------------------
+* Настройка линий графика
+*--------------------------------------------------------------------------------------------
+	IF EMPTY(m.rep_error)
+		FOR i=1 TO GETWORDCOUNT(m.rep_sourse,",")-1
+			WITH oChart.FullSeriesCollection(m.i)
+				.Format.Line.Visible = .T.
+			ENDWITH
+		ENDFOR
+		FOR i=1 TO GETWORDCOUNT(m.rep_nastr,"|")				&& применяем доп настройки
+			line_data=ALLTRIM(GETWORDNUM(m.rep_nastr,m.i,"|"))
+			line_lit=ALLTRIM(UPPER(GETWORDNUM(m.line_data,1,":")))
+			line_nomr=INT(VAL(GETWORDNUM(GETWORDNUM(m.line_data,1,"="),2,":")))
+			line_data=ALLTRIM(SUBSTR(m.line_data,AT("=",m.line_data)+1))
+			IF !EMPTY(m.line_nomr)
+				TRY
+					WITH oChart.FullSeriesCollection(m.line_nomr)
+						DO CASE
+						CASE m.line_lit=="RGB"
+							.Format.Line.ForeColor.RGB = EVALUATE(m.line_data)
+						CASE m.line_lit=="DS"
+							.Format.Line.DashStyle = EVALUATE(m.line_data)
+						CASE m.line_lit=="TP"
+							.Format.Line.Transparency = EVALUATE(m.line_data)
+						CASE m.line_lit=="SM"
+							.Smooth = EVALUATE(m.line_data)
+						ENDCASE
+					ENDWITH
+				CATCH TO goto_error
+					rep_error="Ошибка настройки линий графика: "+goto_error.message
+				ENDTRY
+			ENDIF
+		ENDFOR
+	ENDIF
+*		oExcel._oExcel.Visible= .T.
+*		SET STEP ON
+*--------------------------------------------------------------------------------------------
+* Завершающие операции
+*--------------------------------------------------------------------------------------------
+	IF EMPTY(m.rep_error)
+		TRY
+			=oChart.Export(m.rep_xtemp,m.rez_format)
+			IF LEN(FILETOSTR(m.rep_xtemp))=0
+				DELETE FILE (m.rep_xtemp)
+				rep_error='Ошибка сохранения: не поддерживается формат "'+m.rez_format+'".'
+			ENDIF
+		CATCH TO goto_error
+			rep_error="Ошибка сохранения графика: "+goto_error.message
+		ENDTRY
+		oExcel._oExcel.Application.DisplayAlerts=.F.
+		oExcel._oExcel.Application.Quit
+		oExcel=''
+	ENDIF
+	IF EMPTY(m.rep_error)	&& если успешно сформирован график
+		IF m.rep_xname=="RAW"
+			rep_error=FILETOSTR(m.rep_xtemp)	&& RAW
+			DELETE FILE (m.rep_xtemp)
+		ELSE
+			rep_error=m.rep_xtemp				&& FullName
+		ENDIF
+		RETURN m.rep_error	&& путь файла | RAW PNG контент		
+	ENDIF
+RETURN "ERROR: "+m.rep_error	&& ошибка
